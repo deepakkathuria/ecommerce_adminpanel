@@ -53,38 +53,38 @@
 //   const handleImageUpload = async (e) => {
 //     const files = Array.from(e.target.files); // Convert FileList to Array
 //     if (!files.length) return;
-  
+
 //     console.log("Selected files:", files); // ✅ Debugging
-  
+
 //     try {
 //       // Show a loading message while uploading
 //       toast.info("Uploading images... Please wait!", { autoClose: 2000 });
-  
+
 //       // Use `Promise.all` to upload all images concurrently
 //       const uploadPromises = files.map(async (file) => {
 //         const formData = new FormData();
 //         formData.append("file", file);
 //         formData.append("upload_preset", "zairi_sucess"); // ✅ Correct Cloudinary Preset
 //         formData.append("folder", "products");
-  
+
 //         const response = await axios.post(
 //           "https://api.cloudinary.com/v1_1/dqvntxciv/image/upload",
 //           formData
 //         );
-  
+
 //         console.log("Cloudinary response:", response.data); // ✅ Debug Cloudinary Response
 //         return response.data.secure_url; // Return the uploaded image URL
 //       });
-  
+
 //       // Wait for all images to finish uploading
 //       const uploadedImages = await Promise.all(uploadPromises);
-  
+
 //       // ✅ Ensure React state updates with new images
 //       setProduct((prev) => ({
 //         ...prev,
 //         images: [...prev.images, ...uploadedImages], // Merge with existing images
 //       }));
-  
+
 //       console.log("Final uploaded images before updating state:", uploadedImages);
 //       toast.success("✅ Images uploaded successfully!");
 //     } catch (error) {
@@ -92,8 +92,7 @@
 //       toast.error(`❌ Failed to upload images`);
 //     }
 //   };
-  
-  
+
 //   const removeImage = (index) => {
 //     const updatedImages = [...product.images];
 //     updatedImages.splice(index, 1);
@@ -105,23 +104,23 @@
 
 //   // const handleSubmit = async (e) => {
 //   //   e.preventDefault();
-  
+
 //   //   console.log("Images before submitting:", product.images); // ✅ Debug images
-  
+
 //   //   // ✅ Check if images exist before submission
 //   //   if (product.images.length === 0) {
 //   //     toast.error("❌ Please upload at least one image before submitting!");
 //   //     return;
 //   //   }
-  
+
 //   //   try {
 //   //     const payload = {
 //   //       ...product,
 //   //       images: product.images, // ✅ Ensure images are sent as an array
 //   //     };
-  
+
 //   //     console.log("Submitting payload:", payload); // ✅ Debug Payload
-  
+
 //   //     if (id) {
 //   //       await axios.put(
 //   //         `http://localhost:5000/admin/product/${id}`,
@@ -135,41 +134,34 @@
 //   //       );
 //   //       toast.success("✅ Product added successfully!");
 //   //     }
-  
+
 //   //     navigate("/products");
 //   //   } catch (error) {
 //   //     console.error("Error saving product:", error.response?.data || error);
 //   //     toast.error("❌ Failed to save product");
 //   //   }
 //   // };
-  
-  
-
-
-
-
-
 
 //   const handleSubmit = async (e) => {
 //     e.preventDefault();
-  
+
 //     console.log("Images before submitting:", product.images); // ✅ Debug images
-  
+
 //     // ✅ Ensure images are sent as an array
 //     const formattedImages = Array.isArray(product.images)
 //       ? product.images
 //       : product.images
 //       ? [product.images]
 //       : [];
-  
+
 //     try {
 //       const payload = {
 //         ...product,
 //         images: formattedImages, // ✅ Fix: Always send images as an array
 //       };
-  
+
 //       console.log("Submitting payload:", payload); // ✅ Debug Payload
-  
+
 //       if (id) {
 //         await axios.put(
 //           `https://hammerhead-app-jkdit.ondigitalocean.app/admin/product/${id}`,
@@ -183,15 +175,14 @@
 //         );
 //         toast.success("✅ Product added successfully!");
 //       }
-  
+
 //       navigate("/products");
 //     } catch (error) {
 //       console.error("❌ Error saving product:", error.response?.data || error);
 //       toast.error("❌ Failed to save product");
 //     }
 //   };
-  
-  
+
 //   return (
 //     <Container fluid className="py-5">
 //       <Card className="shadow-lg p-4 rounded w-100" style={{ maxWidth: "100%" }}>
@@ -310,9 +301,6 @@
 
 // export default ProductForm;
 
-
-
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
@@ -364,6 +352,7 @@ const ProductForm = () => {
         subcategory: productData.subcategory || "",
         is_trendy: !!productData.is_trendy,
         is_unique: !!productData.is_unique,
+        sold_out: !!productData.sold_out, // ✅ NEW
       });
     } catch (error) {
       console.error("Error fetching product:", error);
@@ -459,7 +448,10 @@ const ProductForm = () => {
 
   return (
     <Container fluid className="py-5">
-      <Card className="shadow-lg p-4 rounded w-100" style={{ maxWidth: "100%" }}>
+      <Card
+        className="shadow-lg p-4 rounded w-100"
+        style={{ maxWidth: "100%" }}
+      >
         <Card.Body>
           <h2 className="text-center mb-4 fw-bold">
             {id ? "✏️ Edit Product" : "➕ Add Product"}
@@ -537,6 +529,13 @@ const ProductForm = () => {
                   checked={product.is_unique}
                   onChange={handleCheckboxChange}
                 />
+                <Form.Check
+                  type="checkbox"
+                  label="❌ Sold Out"
+                  name="sold_out"
+                  checked={product.sold_out}
+                  onChange={handleCheckboxChange}
+                />
               </Col>
             </Row>
 
@@ -563,12 +562,21 @@ const ProductForm = () => {
 
             <Row className="mb-3">
               {product.images.map((image, index) => (
-                <Col key={index} xs={6} md={3} className="mb-3 position-relative">
+                <Col
+                  key={index}
+                  xs={6}
+                  md={3}
+                  className="mb-3 position-relative"
+                >
                   <img
                     src={image}
                     alt="Uploaded"
                     className="img-thumbnail rounded shadow-sm"
-                    style={{ width: "100%", height: "120px", objectFit: "cover" }}
+                    style={{
+                      width: "100%",
+                      height: "120px",
+                      objectFit: "cover",
+                    }}
                   />
                   <Button
                     variant="danger"
