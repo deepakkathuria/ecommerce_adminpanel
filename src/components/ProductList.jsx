@@ -512,13 +512,20 @@ const ProductList = () => {
                         )}
                       </td>
                       <td>
-                        <span
-                          className={`status-pill ${
-                            product.sold_out ? "status-pill--danger" : "status-pill--success"
-                          }`}
-                        >
-                          {product.sold_out ? "Sold out" : "Available"}
-                        </span>
+                        <div className="stacked-text">
+                          <span className="fw-semibold">
+                            {Number(product.stock_quantity ?? 0)}
+                          </span>
+                          <span
+                            className={`status-pill ${
+                              product.sold_out
+                                ? "status-pill--danger"
+                                : "status-pill--success"
+                            }`}
+                          >
+                            {product.sold_out ? "Sold out" : "Available"}
+                          </span>
+                        </div>
                       </td>
                       <td className="text-end fw-semibold">
                         ₹ {Number(product.price).toLocaleString()}

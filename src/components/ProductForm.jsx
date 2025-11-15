@@ -309,40 +309,6 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { Form, Button, Container, Card, Row, Col } from "react-bootstrap";
 import { API_ROUTES } from "../config";
 
-const formatJsonField = (value, fallback = "[]") => {
-  if (!value) return fallback;
-  try {
-    const parsed = typeof value === "string" ? JSON.parse(value) : value;
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return value;
-  }
-};
-
-const prepareJsonField = (value, fallback = "[]") => {
-  if (!value || !value.trim()) return fallback;
-  try {
-    const parsed = JSON.parse(value);
-    return JSON.stringify(parsed);
-  } catch {
-    const lines = value
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return lines.length ? JSON.stringify(lines) : fallback;
-  }
-};
-
-const isJsonValid = (value) => {
-  if (!value || !value.trim()) return true;
-  try {
-    JSON.parse(value);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 const slugify = (value) =>
   value
     .toString()
@@ -360,15 +326,11 @@ const ProductForm = () => {
     short_name: "",
     slug: "",
     price: "",
+    stock_quantity: "",
     category: "",
     subcategory: "",
     description: "",
     features: "",
-    includesRaw: "[]",
-    galleryRaw: "[]",
-    categoryImageRaw: "[]",
-    cart_image: "",
-    first_image: "",
     is_trendy: false,
     is_unique: false,
     sold_out: false,
@@ -405,11 +367,11 @@ const ProductForm = () => {
         slug: productData.slug || "",
         short_name: productData.short_name || "",
         features: productData.features || "",
-        includesRaw: formatJsonField(productData.includes, "[]"),
-        galleryRaw: formatJsonField(productData.gallery, "[]"),
-        categoryImageRaw: formatJsonField(productData.category_image, "[]"),
-        cart_image: productData.cart_image || "",
-        first_image: productData.first_image || "",
+        stock_quantity:
+          productData.stock_quantity === null ||
+          productData.stock_quantity === undefined
+            ? ""
+            : String(productData.stock_quantity),
         subcategory: productData.subcategory || "",
         is_trendy: !!productData.is_trendy,
         is_unique: !!productData.is_unique,
@@ -434,6 +396,11 @@ const ProductForm = () => {
       }
       if (name === "slug") {
         return { ...prev, slug: slugify(value) };
+      }
+      if (name === "stock_quantity") {
+        const sanitized =
+          value === "" ? "" : Math.max(0, parseInt(value, 10) || 0);
+        return { ...prev, stock_quantity: sanitized };
       }
       return { ...prev, [name]: value };
     });
@@ -498,20 +465,23 @@ const ProductForm = () => {
     setSaving(true);
 
     try {
+      const primaryImage = product.images[0] || null;
+
       const payload = {
         name: product.name,
         short_name: product.short_name,
         slug: product.slug,
         price: Number(product.price),
+        stock_quantity: Number(product.stock_quantity || 0),
         category: product.category?.trim().toLowerCase(),
         subcategory: product.subcategory?.trim().toLowerCase() || null,
         description: product.description,
         features: product.features,
-        includes: prepareJsonField(product.includesRaw),
-        gallery: prepareJsonField(product.galleryRaw),
-        category_image: prepareJsonField(product.categoryImageRaw),
-        cart_image: product.cart_image,
-        first_image: product.first_image,
+        includes: [],
+        gallery: product.images,
+        category_image: primaryImage ? [primaryImage] : [],
+        cart_image: primaryImage,
+        first_image: primaryImage,
         is_trendy: product.is_trendy,
         is_unique: product.is_unique,
         sold_out: product.sold_out,
@@ -604,7 +574,7 @@ const ProductForm = () => {
             </Row>
 
             <Row className="mb-3">
-              <Col md={4}>
+              <Col md={3}>
                 <Form.Group>
                   <Form.Label>Price (₹)</Form.Label>
                   <Form.Control
@@ -618,7 +588,20 @@ const ProductForm = () => {
                   />
                 </Form.Group>
               </Col>
-              <Col md={4}>
+              <Col md={3}>
+                <Form.Group>
+                  <Form.Label>Stock Quantity</Form.Label>
+                  <Form.Control
+                    type="number"
+                    name="stock_quantity"
+                    placeholder="Available pieces"
+                    min="0"
+                    value={product.stock_quantity}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={3}>
                 <Form.Group>
                   <Form.Label>Category</Form.Label>
                   <Form.Control
@@ -631,8 +614,7 @@ const ProductForm = () => {
                   />
                 </Form.Group>
               </Col>
-
-              <Col md={4}>
+              <Col md={3}>
                 <Form.Group>
                   <Form.Label>Subcategory</Form.Label>
                   <Form.Control
@@ -647,32 +629,8 @@ const ProductForm = () => {
             </Row>
 
             <Row className="mb-3">
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Cart Image URL</Form.Label>
-                  <Form.Control
-                    type="url"
-                    name="cart_image"
-                    placeholder="Image for cart preview"
-                    value={product.cart_image}
-                    onChange={handleChange}
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>First Image URL</Form.Label>
-                  <Form.Control
-                    type="url"
-                    name="first_image"
-                    placeholder="Hero image"
-                    value={product.first_image}
-                    onChange={handleChange}
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={4}>
-                <div className="d-flex flex-wrap gap-3 mt-4 pt-2">
+              <Col>
+                <div className="d-flex flex-wrap gap-3 mt-2">
                   <Form.Check
                     type="checkbox"
                     label="🔥 Trendy"
@@ -734,59 +692,6 @@ const ProductForm = () => {
               </Col>
             </Row>
 
-            <Row className="mb-3">
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Includes (JSON)</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={4}
-                    name="includesRaw"
-                    value={product.includesRaw}
-                    onChange={handleChange}
-                  />
-                  <Form.Text muted>
-                    {isJsonValid(product.includesRaw)
-                      ? "JSON looks good."
-                      : "Invalid JSON"}
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Gallery (JSON)</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={4}
-                    name="galleryRaw"
-                    value={product.galleryRaw}
-                    onChange={handleChange}
-                  />
-                  <Form.Text muted>
-                    {isJsonValid(product.galleryRaw)
-                      ? "JSON looks good."
-                      : "Invalid JSON"}
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>Category Image (JSON)</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={4}
-                    name="categoryImageRaw"
-                    value={product.categoryImageRaw}
-                    onChange={handleChange}
-                  />
-                  <Form.Text muted>
-                    {isJsonValid(product.categoryImageRaw)
-                      ? "JSON looks good."
-                      : "Invalid JSON"}
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-            </Row>
 
             <Form.Group className="mb-3">
               <Form.Label>Upload Images</Form.Label>
