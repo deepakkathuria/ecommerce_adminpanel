@@ -307,6 +307,49 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Form, Button, Container, Card, Row, Col } from "react-bootstrap";
+import { API_ROUTES } from "../config";
+
+const formatJsonField = (value, fallback = "[]") => {
+  if (!value) return fallback;
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
+};
+
+const prepareJsonField = (value, fallback = "[]") => {
+  if (!value || !value.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return JSON.stringify(parsed);
+  } catch {
+    const lines = value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return lines.length ? JSON.stringify(lines) : fallback;
+  }
+};
+
+const isJsonValid = (value) => {
+  if (!value || !value.trim()) return true;
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const slugify = (value) =>
+  value
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 
 const ProductForm = () => {
   const { id } = useParams();
@@ -314,14 +357,26 @@ const ProductForm = () => {
 
   const [product, setProduct] = useState({
     name: "",
+    short_name: "",
+    slug: "",
     price: "",
     category: "",
     subcategory: "",
     description: "",
+    features: "",
+    includesRaw: "[]",
+    galleryRaw: "[]",
+    categoryImageRaw: "[]",
+    cart_image: "",
+    first_image: "",
     is_trendy: false,
     is_unique: false,
+    sold_out: false,
+    is_new: false,
     images: [],
   });
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -331,10 +386,7 @@ const ProductForm = () => {
 
   const fetchProduct = async () => {
     try {
-      const response = await axios.get(
-        `https://hammerhead-app-jkdit.ondigitalocean.app/admin/product/${id}`
-      );
-
+      const response = await axios.get(API_ROUTES.adminProduct(id));
       const productData = response.data.product;
       let imagesArray = [];
 
@@ -347,21 +399,44 @@ const ProductForm = () => {
       }
 
       setProduct({
+        ...product,
         ...productData,
         images: imagesArray,
+        slug: productData.slug || "",
+        short_name: productData.short_name || "",
+        features: productData.features || "",
+        includesRaw: formatJsonField(productData.includes, "[]"),
+        galleryRaw: formatJsonField(productData.gallery, "[]"),
+        categoryImageRaw: formatJsonField(productData.category_image, "[]"),
+        cart_image: productData.cart_image || "",
+        first_image: productData.first_image || "",
         subcategory: productData.subcategory || "",
         is_trendy: !!productData.is_trendy,
         is_unique: !!productData.is_unique,
-        sold_out: !!productData.sold_out, // ✅ NEW
+        sold_out: !!productData.sold_out,
+        is_new: !!productData.new,
       });
     } catch (error) {
       console.error("Error fetching product:", error);
+      toast.error("Unable to load product. Please retry.");
     }
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setProduct({ ...product, [name]: value });
+    setProduct((prev) => {
+      if (name === "name") {
+        return {
+          ...prev,
+          name: value,
+          slug: prev.slug ? prev.slug : slugify(value),
+        };
+      }
+      if (name === "slug") {
+        return { ...prev, slug: slugify(value) };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleCheckboxChange = (e) => {
@@ -374,6 +449,7 @@ const ProductForm = () => {
     if (!files.length) return;
 
     toast.info("Uploading images...");
+    setUploading(true);
 
     try {
       const uploadPromises = files.map(async (file) => {
@@ -400,6 +476,8 @@ const ProductForm = () => {
     } catch (error) {
       console.error("Upload error:", error);
       toast.error("Image upload failed!");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -417,25 +495,37 @@ const ProductForm = () => {
       return;
     }
 
+    setSaving(true);
+
     try {
       const payload = {
-        ...product,
+        name: product.name,
+        short_name: product.short_name,
+        slug: product.slug,
+        price: Number(product.price),
+        category: product.category?.trim().toLowerCase(),
+        subcategory: product.subcategory?.trim().toLowerCase() || null,
+        description: product.description,
+        features: product.features,
+        includes: prepareJsonField(product.includesRaw),
+        gallery: prepareJsonField(product.galleryRaw),
+        category_image: prepareJsonField(product.categoryImageRaw),
+        cart_image: product.cart_image,
+        first_image: product.first_image,
+        is_trendy: product.is_trendy,
+        is_unique: product.is_unique,
+        sold_out: product.sold_out,
+        new: product.is_new ? 1 : 0,
         images: Array.isArray(product.images)
           ? product.images
           : [product.images],
       };
 
       if (id) {
-        await axios.put(
-          `https://hammerhead-app-jkdit.ondigitalocean.app/admin/product/${id}`,
-          payload
-        );
+        await axios.put(API_ROUTES.adminProduct(id), payload);
         toast.success("Product updated successfully!");
       } else {
-        await axios.post(
-          "https://hammerhead-app-jkdit.ondigitalocean.app/admin/products",
-          payload
-        );
+        await axios.post(API_ROUTES.adminProducts, payload);
         toast.success("Product added successfully!");
       }
 
@@ -443,6 +533,8 @@ const ProductForm = () => {
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save product!");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -458,7 +550,7 @@ const ProductForm = () => {
           </h2>
           <Form onSubmit={handleSubmit}>
             <Row className="mb-3">
-              <Col md={6}>
+              <Col md={5}>
                 <Form.Group>
                   <Form.Label>Product Name</Form.Label>
                   <Form.Control
@@ -471,22 +563,61 @@ const ProductForm = () => {
                   />
                 </Form.Group>
               </Col>
-              <Col md={6}>
+              <Col md={3}>
                 <Form.Group>
-                  <Form.Label>Price</Form.Label>
+                  <Form.Label>Short Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="short_name"
+                    placeholder="Internal short label"
+                    value={product.short_name}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Slug</Form.Label>
+                  <div className="d-flex gap-2">
+                    <Form.Control
+                      type="text"
+                      name="slug"
+                      placeholder="auto-generated slug"
+                      value={product.slug}
+                      onChange={handleChange}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      type="button"
+                      onClick={() =>
+                        setProduct((prev) => ({
+                          ...prev,
+                          slug: slugify(prev.name || ""),
+                        }))
+                      }
+                    >
+                      Auto
+                    </Button>
+                  </div>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row className="mb-3">
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Price (₹)</Form.Label>
                   <Form.Control
                     type="number"
                     name="price"
                     placeholder="Enter price"
                     value={product.price}
                     onChange={handleChange}
+                    min="0"
                     required
                   />
                 </Form.Group>
               </Col>
-            </Row>
-
-            <Row className="mb-3">
               <Col md={4}>
                 <Form.Group>
                   <Form.Label>Category</Form.Label>
@@ -513,61 +644,166 @@ const ProductForm = () => {
                   />
                 </Form.Group>
               </Col>
+            </Row>
 
-              <Col md={4} className="d-flex align-items-center gap-3 mt-4">
-                <Form.Check
-                  type="checkbox"
-                  label="🔥 Trendy"
-                  name="is_trendy"
-                  checked={product.is_trendy}
-                  onChange={handleCheckboxChange}
-                />
-                <Form.Check
-                  type="checkbox"
-                  label="💎 Unique"
-                  name="is_unique"
-                  checked={product.is_unique}
-                  onChange={handleCheckboxChange}
-                />
-                <Form.Check
-                  type="checkbox"
-                  label="❌ Sold Out"
-                  name="sold_out"
-                  checked={product.sold_out}
-                  onChange={handleCheckboxChange}
-                />
+            <Row className="mb-3">
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Cart Image URL</Form.Label>
+                  <Form.Control
+                    type="url"
+                    name="cart_image"
+                    placeholder="Image for cart preview"
+                    value={product.cart_image}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>First Image URL</Form.Label>
+                  <Form.Control
+                    type="url"
+                    name="first_image"
+                    placeholder="Hero image"
+                    value={product.first_image}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <div className="d-flex flex-wrap gap-3 mt-4 pt-2">
+                  <Form.Check
+                    type="checkbox"
+                    label="🔥 Trendy"
+                    name="is_trendy"
+                    checked={product.is_trendy}
+                    onChange={handleCheckboxChange}
+                  />
+                  <Form.Check
+                    type="checkbox"
+                    label="💎 Unique"
+                    name="is_unique"
+                    checked={product.is_unique}
+                    onChange={handleCheckboxChange}
+                  />
+                  <Form.Check
+                    type="checkbox"
+                    label="❌ Sold Out"
+                    name="sold_out"
+                    checked={product.sold_out}
+                    onChange={handleCheckboxChange}
+                  />
+                  <Form.Check
+                    type="checkbox"
+                    label="✨ New"
+                    name="is_new"
+                    checked={product.is_new}
+                    onChange={handleCheckboxChange}
+                  />
+                </div>
               </Col>
             </Row>
 
             <Row className="mb-3">
-              <Col>
+              <Col md={6}>
                 <Form.Group>
                   <Form.Label>Description</Form.Label>
                   <Form.Control
                     as="textarea"
-                    rows={3}
+                    rows={4}
                     name="description"
-                    placeholder="Enter description"
+                    placeholder="Add a meaningful summary"
                     value={product.description}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Features</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    name="features"
+                    placeholder="Bullet list or narrative features"
+                    value={product.features}
                     onChange={handleChange}
                   />
                 </Form.Group>
               </Col>
             </Row>
 
+            <Row className="mb-3">
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Includes (JSON)</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    name="includesRaw"
+                    value={product.includesRaw}
+                    onChange={handleChange}
+                  />
+                  <Form.Text muted>
+                    {isJsonValid(product.includesRaw)
+                      ? "JSON looks good."
+                      : "Invalid JSON"}
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Gallery (JSON)</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    name="galleryRaw"
+                    value={product.galleryRaw}
+                    onChange={handleChange}
+                  />
+                  <Form.Text muted>
+                    {isJsonValid(product.galleryRaw)
+                      ? "JSON looks good."
+                      : "Invalid JSON"}
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Category Image (JSON)</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={4}
+                    name="categoryImageRaw"
+                    value={product.categoryImageRaw}
+                    onChange={handleChange}
+                  />
+                  <Form.Text muted>
+                    {isJsonValid(product.categoryImageRaw)
+                      ? "JSON looks good."
+                      : "Invalid JSON"}
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
             <Form.Group className="mb-3">
               <Form.Label>Upload Images</Form.Label>
-              <Form.Control type="file" multiple onChange={handleImageUpload} />
+              <Form.Control
+                type="file"
+                multiple
+                onChange={handleImageUpload}
+                disabled={uploading}
+              />
+              {uploading && (
+                <Form.Text muted>Uploading to Cloudinary…</Form.Text>
+              )}
             </Form.Group>
 
-            <Row className="mb-3">
+            <Row className="mb-4">
               {product.images.map((image, index) => (
-                <Col
-                  key={index}
-                  xs={6}
-                  md={3}
-                  className="mb-3 position-relative"
-                >
+                <Col key={index} xs={6} md={3} className="mb-3 position-relative">
                   <img
                     src={image}
                     alt="Uploaded"
@@ -590,8 +826,17 @@ const ProductForm = () => {
               ))}
             </Row>
 
-            <Button variant="primary" type="submit" className="w-100 fw-bold">
-              {id ? "Update Product" : "Save Product"}
+            <Button
+              variant="primary"
+              type="submit"
+              className="w-100 fw-bold"
+              disabled={saving || uploading}
+            >
+              {saving
+                ? "Saving..."
+                : id
+                ? "Update Product"
+                : "Save Product"}
             </Button>
           </Form>
         </Card.Body>
